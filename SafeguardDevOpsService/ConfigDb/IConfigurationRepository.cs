@@ -29,6 +29,7 @@ namespace OneIdentity.DevOps.ConfigDb
         string SvcId { get; set; }
         string DbPasswd { get; }
         bool? IgnoreSsl { get; set; }
+        bool? TrustSystemStore { get; set; }
         int? A2aUserId { get; set; }
         int? A2aRegistrationId { get; set; }
         int? A2aVaultRegistrationId { get; set; }

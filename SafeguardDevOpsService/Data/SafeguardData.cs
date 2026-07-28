@@ -17,5 +17,9 @@
         /// Should ignore Ssl verification
         /// </summary>
         public bool? IgnoreSsl { get; set; }
+        /// <summary>
+        /// When true, certificates validated by the OS/system certificate store are automatically trusted
+        /// </summary>
+        public bool? TrustSystemStore { get; set; }
     }
 }

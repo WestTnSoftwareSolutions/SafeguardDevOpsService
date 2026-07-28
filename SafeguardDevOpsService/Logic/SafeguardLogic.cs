@@ -1893,6 +1893,7 @@ namespace OneIdentity.DevOps.Logic
                 {
                     ApplianceAddress = _configDb.SafeguardAddress,
                     IgnoreSsl = _configDb.IgnoreSsl,
+                    TrustSystemStore = _configDb.TrustSystemStore,
                     ApiVersion = _configDb.ApiVersion ?? WellKnownData.DefaultApiVersion
                 };
 
@@ -1998,10 +1999,13 @@ namespace OneIdentity.DevOps.Logic
                 _configDb.SafeguardAddress = safeguardData.ApplianceAddress;
                 _configDb.ApiVersion = safeguardData.ApiVersion ?? WellKnownData.DefaultApiVersion;
                 _configDb.IgnoreSsl = safeguardData.IgnoreSsl ?? true;
+                if (safeguardData.TrustSystemStore.HasValue)
+                    _configDb.TrustSystemStore = safeguardData.TrustSystemStore;
 
                 safeguardConnection.ApplianceAddress = _configDb.SafeguardAddress;
                 safeguardConnection.ApiVersion = _configDb.ApiVersion;
                 safeguardConnection.IgnoreSsl = _configDb.IgnoreSsl;
+                safeguardConnection.TrustSystemStore = _configDb.TrustSystemStore;
                 return safeguardConnection;
             }
 

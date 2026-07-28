@@ -35,6 +35,11 @@ namespace OneIdentity.DevOps.Logic
         {
             try
             {
+                if ((configDb.TrustSystemStore ?? false) && sslPolicyErrors == SslPolicyErrors.None)
+                {
+                    return true;
+                }
+
                 var cert2 = new X509Certificate2(certificate);
 
                 if (HasExpired(cert2, logger))
