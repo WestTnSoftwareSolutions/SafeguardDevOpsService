@@ -209,6 +209,26 @@ Initialization of the Secrets Broker on Windows or as a Docker image can be cont
 
 ## Configuring Safeguard Secrets Broker for DevOps
 
+### SPP TLS Trust Modes
+
+Secrets Broker supports two secure approaches for validating the TLS certificate presented by Safeguard for Privileged Passwords:
+
+* **System trust** (`TrustSystemStore: true`) is recommended for Safeguard On Demand and other SPP deployments that use certificates issued by a public or enterprise CA trusted by the host operating system. The connection is accepted only when the .NET TLS stack reports no certificate policy errors, including chain, validity, and DNS hostname validation errors. Configure Secrets Broker with the DNS hostname present in the SPP certificate's subject alternative names; do not use an IP address when the certificate identifies only a DNS name.
+* **Custom trust** (`TrustSystemStore: false`, the default) preserves the existing behavior for private PKI and self-signed deployments. Administrators explicitly load the required certificates into the Secrets Broker trusted-certificate store.
+
+`TrustSystemStore` is not equivalent to `IgnoreSsl`. System trust performs standard operating-system certificate and hostname validation. `IgnoreSsl` disables TLS certificate validation and should be used only during controlled initial configuration, never as a normal operating mode.
+
+The trust mode is configured with `PUT /service/devops/v2/Safeguard`. For example, a Safeguard On Demand connection should use its certificate's DNS hostname:
+
+```json
+{
+  "ApplianceAddress": "tenant.example.safeguardondemand.com",
+  "ApiVersion": 4,
+  "IgnoreSsl": false,
+  "TrustSystemStore": true
+}
+```
+
 ### Using the Web User Interface
 
 1. Once the Secrets Broker has been install and the service as been started as described above, in a browser navigate to the root URI of the service. `https://<service IP address or DNS>`

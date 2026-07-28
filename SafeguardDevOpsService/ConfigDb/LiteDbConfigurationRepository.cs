@@ -40,6 +40,7 @@ namespace OneIdentity.DevOps.ConfigDb
         private const string SafeguardAddressKey = "SafeguardAddress";
         private const string ApiVersionKey = "ApiVersion";
         private const string IgnoreSslKey = "IgnoreSsl";
+        private const string TrustSystemStoreKey = "TrustSystemStore";
         private const string A2aUserIdKey = "A2aUserId";
         private const string A2aRegistrationIdKey = "A2aRegistrationId";
         private const string A2aVaultRegistrationIdKey = "A2aVaultRegistrationId";
@@ -454,6 +455,22 @@ namespace OneIdentity.DevOps.ConfigDb
                 }
             }
             set => SetSimpleSetting(IgnoreSslKey, value.ToString());
+        }
+
+        public bool? TrustSystemStore
+        {
+            get
+            {
+                try
+                {
+                    return bool.Parse(GetSimpleSetting(TrustSystemStoreKey));
+                }
+                catch
+                {
+                    return null;
+                }
+            }
+            set => SetSimpleSetting(TrustSystemStoreKey, value.ToString());
         }
 
         public int? A2aUserId

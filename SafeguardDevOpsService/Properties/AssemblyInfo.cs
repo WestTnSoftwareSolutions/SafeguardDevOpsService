@@ -1,5 +1,6 @@
 
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Resources;
 
 // General Information
@@ -16,4 +17,5 @@ using System.Resources;
 [assembly: AssemblyVersion("255.255.65534.65534")]
 [assembly: AssemblyFileVersion("255.255.65534.65534")]
 [assembly: NeutralResourcesLanguageAttribute( "en-US" )]
+[assembly: InternalsVisibleTo("SafeguardDevOpsService.Tests")]
 

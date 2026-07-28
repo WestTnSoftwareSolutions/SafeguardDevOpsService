@@ -63,6 +63,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SecretsBrokerPlugin", "Exte
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GoogleCloudServiceAccountKeyRotation", "ExternalPlugins\GoogleCloudServiceAccountKeyRotation\GoogleCloudServiceAccountKeyRotation.csproj", "{FF3226DC-9066-AD72-817F-F07FC21C924B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SafeguardDevOpsService.Tests", "SafeguardDevOpsService.Tests\SafeguardDevOpsService.Tests.csproj", "{0F49C9B7-F865-4D27-8F0D-3AA2C2DB52D0}"
+EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "pipeline-templates", "pipeline-templates", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
 	ProjectSection(SolutionItems) = preProject
 		pipeline-templates\global-variables.yml = pipeline-templates\global-variables.yml
@@ -139,6 +141,10 @@ Global
 		{FF3226DC-9066-AD72-817F-F07FC21C924B}.Debug|x64.Build.0 = Debug|x64
 		{FF3226DC-9066-AD72-817F-F07FC21C924B}.Release|x64.ActiveCfg = Release|x64
 		{FF3226DC-9066-AD72-817F-F07FC21C924B}.Release|x64.Build.0 = Release|x64
+		{0F49C9B7-F865-4D27-8F0D-3AA2C2DB52D0}.Debug|x64.ActiveCfg = Debug|x64
+		{0F49C9B7-F865-4D27-8F0D-3AA2C2DB52D0}.Debug|x64.Build.0 = Debug|x64
+		{0F49C9B7-F865-4D27-8F0D-3AA2C2DB52D0}.Release|x64.ActiveCfg = Release|x64
+		{0F49C9B7-F865-4D27-8F0D-3AA2C2DB52D0}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

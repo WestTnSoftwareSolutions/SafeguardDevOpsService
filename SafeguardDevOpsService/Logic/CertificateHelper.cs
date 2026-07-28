@@ -33,8 +33,28 @@ namespace OneIdentity.DevOps.Logic
             SslPolicyErrors sslPolicyErrors, Serilog.ILogger logger, IConfigurationRepository configDb, 
             IEnumerable<TrustedCertificate> customTrustedCertificateList = null)
         {
+            return CertificateValidation(certificate, chain, sslPolicyErrors, logger,
+                configDb.TrustSystemStore ?? false, configDb.SafeguardAddress,
+                customTrustedCertificateList ?? configDb.GetAllTrustedCertificates());
+        }
+
+        internal static bool CertificateValidation(X509Certificate certificate, X509Chain chain,
+            SslPolicyErrors sslPolicyErrors, Serilog.ILogger logger, bool trustSystemStore,
+            string safeguardAddress, IEnumerable<TrustedCertificate> trustedCertificateList)
+        {
             try
             {
+                if (trustSystemStore && sslPolicyErrors == SslPolicyErrors.None)
+                {
+                    return true;
+                }
+
+                if (trustSystemStore)
+                {
+                    logger.Warning("SPP TLS system certificate validation failed with {SslPolicyErrors}; evaluating the configured custom trust store.",
+                        sslPolicyErrors);
+                }
+
                 var cert2 = new X509Certificate2(certificate);
 
                 if (HasExpired(cert2, logger))
@@ -46,24 +66,21 @@ namespace OneIdentity.DevOps.Logic
                 if (HasEku(cert2, "1.3.6.1.5.5.7.3.1"))
                 {
                     var sans = GetSubjectAlternativeName(cert2, logger);
-                    var safeguardAddress = configDb.SafeguardAddress;
-                    if (!sans.Exists(x => x.Equals(safeguardAddress, StringComparison.InvariantCultureIgnoreCase) ||
-                                          (x.StartsWith("*") && safeguardAddress.Substring(safeguardAddress.IndexOf('.'))
-                                              .Equals(x.Substring(1), StringComparison.InvariantCultureIgnoreCase))))
+                    if (!sans.Exists(x => MatchesDnsName(x, safeguardAddress)))
                     {
-                        logger.Debug("Failed to find a matching subject alternative name.");
+                        logger.Error("SPP TLS certificate validation failed because the configured Safeguard DNS name does not match a certificate subject alternative name.");
                         return false;
                     }
                 }
 
-                var trustedCertificates = (customTrustedCertificateList ?? configDb.GetAllTrustedCertificates()).ToArray();
+                var trustedCertificates = (trustedCertificateList ?? Array.Empty<TrustedCertificate>()).ToArray();
 
                 // if the certificate is self-signed, then the certificate must be in the trusted certificate list.
                 if (IsSelfSigned(cert2))
                 {
                     var result = trustedCertificates.Any(x => x.Thumbprint.Equals(cert2.Thumbprint));
                     if (!result)
-                        logger.Debug("The self-signed certificate is not found in the trusted certificate list.");
+                        logger.Error("SPP TLS certificate validation failed because the self-signed certificate is not in the configured custom trust store.");
 
                     return result;
                 }
@@ -85,7 +102,7 @@ namespace OneIdentity.DevOps.Logic
                         if ((i > 0) &&
                             !trustedCertificates.Any(x => x.Thumbprint.Equals(chainCert.Certificate.Thumbprint)))
                         {
-                            logger.Error("Failed SPP SSL certificate validation. Maybe missing a trusted certificate.");
+                            logger.Error("SPP TLS certificate validation failed because a certificate in the presented chain is missing from the configured custom trust store.");
                             return false;
                         }
 
@@ -106,7 +123,7 @@ namespace OneIdentity.DevOps.Logic
             }
             catch (Exception ex)
             {
-                logger.Error($"Failed SPP SSL certificate validation: {ex.Message}");
+                logger.Error("SPP TLS certificate validation failed with {ExceptionType}.", ex.GetType().Name);
                 return false;
             }
 
@@ -228,6 +245,22 @@ namespace OneIdentity.DevOps.Logic
         private static bool IsSelfSigned(X509Certificate2 cert)
         {
             return cert.SubjectName.RawData.SequenceEqual(cert.IssuerName.RawData);
+        }
+
+        private static bool MatchesDnsName(string certificateDnsName, string safeguardAddress)
+        {
+            if (string.IsNullOrWhiteSpace(certificateDnsName) || string.IsNullOrWhiteSpace(safeguardAddress))
+                return false;
+
+            if (certificateDnsName.Equals(safeguardAddress, StringComparison.InvariantCultureIgnoreCase))
+                return true;
+
+            if (!certificateDnsName.StartsWith("*.", StringComparison.Ordinal) ||
+                safeguardAddress.IndexOf('.') < 0)
+                return false;
+
+            return safeguardAddress.Substring(safeguardAddress.IndexOf('.'))
+                .Equals(certificateDnsName.Substring(1), StringComparison.InvariantCultureIgnoreCase);
         }
 
         private static bool HasUsage(X509Certificate2 cert, X509KeyUsageFlags flag)

@@ -82,10 +82,20 @@ namespace OneIdentity.DevOps.Logic
                 _configDb);
         }
 
-        private DevOpsException LogAndException(string msg, Exception ex = null)
+        private DevOpsException LogAndException(string msg, Exception ex = null,
+            HttpStatusCode status = HttpStatusCode.BadRequest)
         {
             _logger.Error(ex, msg);
-            return new DevOpsException(msg, ex);
+            return new DevOpsException(msg, ex, status);
+        }
+
+        private DevOpsException SafeguardConnectionException(string address, Exception ex)
+        {
+            _logger.Error("Unable to establish a secure connection to Safeguard at {Address}. Failure type: {ExceptionType}.",
+                address, ex.GetType().Name);
+            return new DevOpsException(
+                $"Unable to establish a secure connection to Safeguard at '{address}'. Verify the appliance address and TLS trust configuration.",
+                ex, HttpStatusCode.BadGateway);
         }
 
         private string DevOpsInvokeMethod(string devOpsInstanceId, ISafeguardConnection sgConnection,
@@ -341,9 +351,9 @@ namespace OneIdentity.DevOps.Logic
                     : Safeguard.Connect(safeguardAddress, CertificateValidationCallback, apiVersion);
                 return GetSafeguardAvailability(sg, safeguardConnection);
             }
-            catch (SafeguardDotNetException ex)
+            catch (Exception ex)
             {
-                throw LogAndException($"Failed to contact Safeguard at '{safeguardAddress}': {ex.Message}", ex);
+                throw SafeguardConnectionException(safeguardAddress, ex);
             }
             finally
             {
@@ -1563,9 +1573,9 @@ namespace OneIdentity.DevOps.Logic
                     ? Safeguard.Connect(address, token, version ?? WellKnownData.DefaultApiVersion, true)
                     : Safeguard.Connect(address, token, CertificateValidationCallback, version ?? WellKnownData.DefaultApiVersion);
             }
-            catch (SafeguardDotNetException ex)
+            catch (Exception ex)
             {
-                throw LogAndException($"Failed to connect to Safeguard at '{address}': {ex.Message}", ex);
+                throw SafeguardConnectionException(address, ex);
             }
         }
 
@@ -1893,6 +1903,7 @@ namespace OneIdentity.DevOps.Logic
                 {
                     ApplianceAddress = _configDb.SafeguardAddress,
                     IgnoreSsl = _configDb.IgnoreSsl,
+                    TrustSystemStore = _configDb.TrustSystemStore,
                     ApiVersion = _configDb.ApiVersion ?? WellKnownData.DefaultApiVersion
                 };
 
@@ -1998,10 +2009,13 @@ namespace OneIdentity.DevOps.Logic
                 _configDb.SafeguardAddress = safeguardData.ApplianceAddress;
                 _configDb.ApiVersion = safeguardData.ApiVersion ?? WellKnownData.DefaultApiVersion;
                 _configDb.IgnoreSsl = safeguardData.IgnoreSsl ?? true;
+                if (safeguardData.TrustSystemStore.HasValue)
+                    _configDb.TrustSystemStore = safeguardData.TrustSystemStore;
 
                 safeguardConnection.ApplianceAddress = _configDb.SafeguardAddress;
                 safeguardConnection.ApiVersion = _configDb.ApiVersion;
                 safeguardConnection.IgnoreSsl = _configDb.IgnoreSsl;
+                safeguardConnection.TrustSystemStore = _configDb.TrustSystemStore;
                 return safeguardConnection;
             }
 
