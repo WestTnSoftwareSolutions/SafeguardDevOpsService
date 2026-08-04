@@ -63,6 +63,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SecretsBrokerPlugin", "Exte
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GoogleCloudServiceAccountKeyRotation", "ExternalPlugins\GoogleCloudServiceAccountKeyRotation\GoogleCloudServiceAccountKeyRotation.csproj", "{FF3226DC-9066-AD72-817F-F07FC21C924B}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "GitlabSecrets", "ExternalPlugins\GitlabSecrets\GitlabSecrets.csproj", "{B5C8D3E2-F6A7-4890-BCDE-FA1234567890}"
+EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "pipeline-templates", "pipeline-templates", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
 	ProjectSection(SolutionItems) = preProject
 		pipeline-templates\global-variables.yml = pipeline-templates\global-variables.yml
@@ -139,6 +141,10 @@ Global
 		{FF3226DC-9066-AD72-817F-F07FC21C924B}.Debug|x64.Build.0 = Debug|x64
 		{FF3226DC-9066-AD72-817F-F07FC21C924B}.Release|x64.ActiveCfg = Release|x64
 		{FF3226DC-9066-AD72-817F-F07FC21C924B}.Release|x64.Build.0 = Release|x64
+		{B5C8D3E2-F6A7-4890-BCDE-FA1234567890}.Debug|x64.ActiveCfg = Debug|x64
+		{B5C8D3E2-F6A7-4890-BCDE-FA1234567890}.Debug|x64.Build.0 = Debug|x64
+		{B5C8D3E2-F6A7-4890-BCDE-FA1234567890}.Release|x64.ActiveCfg = Release|x64
+		{B5C8D3E2-F6A7-4890-BCDE-FA1234567890}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -155,6 +161,7 @@ Global
 		{503D8D03-90DD-42EE-AB70-77B8AEAFA25D} = {0A551322-33E5-4401-BB8A-5A54BC87EB87}
 		{E757643C-9B82-4539-8881-D720D4D79095} = {0A551322-33E5-4401-BB8A-5A54BC87EB87}
 		{FF3226DC-9066-AD72-817F-F07FC21C924B} = {0A551322-33E5-4401-BB8A-5A54BC87EB87}
+		{B5C8D3E2-F6A7-4890-BCDE-FA1234567890} = {0A551322-33E5-4401-BB8A-5A54BC87EB87}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {80DE22D2-799B-4F47-9FE5-2ACC4B0E94D8}
