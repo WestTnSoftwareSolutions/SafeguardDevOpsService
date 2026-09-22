@@ -73,11 +73,12 @@ export class DevOpsServiceClient {
         catchError(this.error<any>('getSafeguard')));
   }
 
-  putSafeguardAppliance(applianceAddress: string): Observable<any> {
+  putSafeguardAppliance(applianceAddress: string, trustSystemStore: boolean): Observable<any> {
     const url = this.BASE + 'Safeguard';
     const payload = {
       ApplianceAddress: applianceAddress,
-      IgnoreSsl: true
+      IgnoreSsl: !trustSystemStore,
+      TrustSystemStore: trustSystemStore
     };
     this.applianceAddress = applianceAddress;
     return this.http.put(url, payload, this.authHeader())

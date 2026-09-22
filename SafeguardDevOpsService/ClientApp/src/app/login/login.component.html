@@ -9,6 +9,9 @@
         <input matInput type="text" [(ngModel)]="applianceAddress" name="applianceAddress"
           (keyup)="handleKeyUp($event)">
       </mat-form-field>
+      <mat-checkbox class="system-trust" [(ngModel)]="trustSystemStore" name="trustSystemStore">
+        Trust certificates using the system certificate store
+      </mat-checkbox>
       <button mat-flat-button color="primary" (click)="connect()" [disabled]="!applianceAddress">Connect</button>
     </mat-card-content>
   </mat-card>

@@ -18,7 +18,8 @@
         /// </summary>
         public bool? IgnoreSsl { get; set; }
         /// <summary>
-        /// When true, certificates validated by the OS/system certificate store are automatically trusted
+        /// When true, certificates validated by the OS/system certificate store are automatically trusted.
+        /// When omitted, the persisted value is used; otherwise this defaults to true on Windows and false elsewhere.
         /// </summary>
         public bool? TrustSystemStore { get; set; }
     }

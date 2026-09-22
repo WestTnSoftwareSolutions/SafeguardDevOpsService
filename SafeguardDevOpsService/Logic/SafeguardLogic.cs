@@ -194,19 +194,21 @@ namespace OneIdentity.DevOps.Logic
             }
         }
 
-        private bool CheckSslConnection(IEnumerable<TrustedCertificate> customCertificateList = null)
+        private bool CheckSslConnection(IEnumerable<TrustedCertificate> customCertificateList = null,
+            string safeguardAddress = null, int? apiVersion = null, bool? trustSystemStore = null)
         {
             ISafeguardConnection sg = null;
             var certChainOk = false;
 
             try
             {
-                sg = Safeguard.Connect(_configDb.SafeguardAddress, 
+                sg = Safeguard.Connect(safeguardAddress ?? _configDb.SafeguardAddress,
                     (object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors) =>
                     {
-                        certChainOk = CertificateHelper.CertificateValidation(sender, certificate, chain, sslPolicyErrors, _logger, _configDb, customCertificateList);
+                        certChainOk = CertificateHelper.CertificateValidation(sender, certificate, chain,
+                            sslPolicyErrors, _logger, _configDb, customCertificateList, trustSystemStore);
                         return certChainOk;
-                    }, _configDb.ApiVersion ?? WellKnownData.DefaultApiVersion);
+                    }, apiVersion ?? _configDb.ApiVersion ?? WellKnownData.DefaultApiVersion);
 
                 return certChainOk;
             }
@@ -289,7 +291,8 @@ namespace OneIdentity.DevOps.Logic
 
         private bool FetchAndStoreSignatureCertificate(string token, SafeguardDevOpsConnection safeguardConnection)
         {
-            var signatureCert = FetchSignatureCertificate(safeguardConnection.ApplianceAddress);
+            var signatureCert = FetchSignatureCertificate(safeguardConnection.ApplianceAddress,
+                !(safeguardConnection.IgnoreSsl ?? true), safeguardConnection.TrustSystemStore);
 
             if (signatureCert != null)
             {
@@ -303,7 +306,8 @@ namespace OneIdentity.DevOps.Logic
             return false;
         }
 
-        private string FetchSignatureCertificate(string applianceAddress)
+        private string FetchSignatureCertificate(string applianceAddress, bool validateSsl = false,
+            bool? trustSystemStore = null)
         {
             // Chicken and egg problem here. Fetching and storing the signature certificate is the first
             //  thing that has to happen on a new system.  We can't check the SSL certificate unless a certificate
@@ -312,10 +316,13 @@ namespace OneIdentity.DevOps.Logic
             //  the validation of the SSL certificate.
             HttpClientHandler handler = new HttpClientHandler
             {
-                ClientCertificateOptions = ClientCertificateOption.Manual,
-                ServerCertificateCustomValidationCallback =
-                    (httpRequestMessage, cert, certChain, policyErrors) => true
+                ClientCertificateOptions = ClientCertificateOption.Manual
             };
+            handler.ServerCertificateCustomValidationCallback = validateSsl
+                ? (httpRequestMessage, cert, certChain, policyErrors) =>
+                    CertificateHelper.CertificateValidation(httpRequestMessage, cert, certChain, policyErrors,
+                        _logger, _configDb, trustSystemStoreOverride: trustSystemStore)
+                : (httpRequestMessage, cert, certChain, policyErrors) => true;
 
             using var client = new HttpClient(handler) {BaseAddress = new Uri($"https://{applianceAddress}")};
             var response = client.GetAsync("RSTS/SigningCertificate").Result;
@@ -324,7 +331,8 @@ namespace OneIdentity.DevOps.Logic
             return CertificateHelper.ConvertPemToBase64(response.Content.ReadAsStringAsync().Result);
         }
 
-        private SafeguardDevOpsConnection ConnectAnonymous(string safeguardAddress, int apiVersion, bool ignoreSsl)
+        private SafeguardDevOpsConnection ConnectAnonymous(string safeguardAddress, int apiVersion, bool ignoreSsl,
+            bool? trustSystemStore = null, bool? reportedIgnoreSsl = null)
         {
             ISafeguardConnection sg = null;
             try
@@ -332,13 +340,20 @@ namespace OneIdentity.DevOps.Logic
                 var safeguardConnection = new SafeguardDevOpsConnection
                 {
                     ApplianceAddress = safeguardAddress,
-                    IgnoreSsl = _configDb.IgnoreSsl ?? ignoreSsl,
+                    IgnoreSsl = reportedIgnoreSsl ?? ignoreSsl,
+                    TrustSystemStore = CertificateHelper.GetEffectiveTrustSystemStore(
+                        trustSystemStore, _configDb.TrustSystemStore),
                     ApiVersion = apiVersion
                 };
 
                 sg = ignoreSsl
                     ? Safeguard.Connect(safeguardAddress, apiVersion, true)
-                    : Safeguard.Connect(safeguardAddress, CertificateValidationCallback, apiVersion);
+                    : Safeguard.Connect(safeguardAddress,
+                        (object sender, X509Certificate certificate, X509Chain chain,
+                            SslPolicyErrors sslPolicyErrors) =>
+                            CertificateHelper.CertificateValidation(sender, certificate, chain, sslPolicyErrors,
+                                _logger, _configDb, trustSystemStoreOverride: safeguardConnection.TrustSystemStore),
+                        apiVersion);
                 return GetSafeguardAvailability(sg, safeguardConnection);
             }
             catch (SafeguardDotNetException ex)
@@ -364,7 +379,7 @@ namespace OneIdentity.DevOps.Logic
                 throw new DevOpsException("Missing safeguard access token.");
 
             return Connect(safeguardConnection.ApplianceAddress, token.ToSecureString(), safeguardConnection.ApiVersion,
-                safeguardConnection.IgnoreSsl);
+                safeguardConnection.IgnoreSsl, safeguardConnection.TrustSystemStore);
         }
 
         private void DisconnectWithAccessToken()
@@ -1548,20 +1563,26 @@ namespace OneIdentity.DevOps.Logic
             if (sc != null)
             {
                 return Connect(sc.Appliance.ApplianceAddress, sc.AccessToken, sc.Appliance.ApiVersion,
-                    sc.Appliance.IgnoreSsl);
+                    sc.Appliance.IgnoreSsl, sc.Appliance.TrustSystemStore);
             }
 
             throw LogAndException("Failed to connect to Safeguard. The service configuration is not set yet.");
         }
 
-        private ISafeguardConnection Connect(string address, SecureString token, int? version, bool? ignoreSsl)
+        private ISafeguardConnection Connect(string address, SecureString token, int? version, bool? ignoreSsl,
+            bool? trustSystemStore = null)
         {
             try
             {
                 _logger.Debug("Connecting to Safeguard as user: {address}", address);
                 return (ignoreSsl.HasValue && ignoreSsl.Value)
                     ? Safeguard.Connect(address, token, version ?? WellKnownData.DefaultApiVersion, true)
-                    : Safeguard.Connect(address, token, CertificateValidationCallback, version ?? WellKnownData.DefaultApiVersion);
+                    : Safeguard.Connect(address, token,
+                        (object sender, X509Certificate certificate, X509Chain chain,
+                            SslPolicyErrors sslPolicyErrors) =>
+                            CertificateHelper.CertificateValidation(sender, certificate, chain, sslPolicyErrors,
+                                _logger, _configDb, trustSystemStoreOverride: trustSystemStore),
+                        version ?? WellKnownData.DefaultApiVersion);
             }
             catch (SafeguardDotNetException ex)
             {
@@ -1578,7 +1599,9 @@ namespace OneIdentity.DevOps.Logic
                 {
                     ApiVersion = _configDb.ApiVersion ?? WellKnownData.DefaultApiVersion,
                     ApplianceAddress = _configDb.SafeguardAddress,
-                    IgnoreSsl = _configDb.IgnoreSsl ?? false
+                    IgnoreSsl = _configDb.IgnoreSsl ?? false,
+                    TrustSystemStore = CertificateHelper.GetEffectiveTrustSystemStore(
+                        null, _configDb.TrustSystemStore)
                 });
         }
 
@@ -1883,20 +1906,21 @@ namespace OneIdentity.DevOps.Logic
 
         public SafeguardDevOpsConnection GetAnonymousSafeguardConnection(bool includeDetails)
         {
+            var safeguardConnection = new SafeguardDevOpsConnection
+            {
+                ApplianceAddress = _configDb.SafeguardAddress,
+                IgnoreSsl = _configDb.IgnoreSsl,
+                TrustSystemStore = CertificateHelper.GetEffectiveTrustSystemStore(
+                    null, _configDb.TrustSystemStore),
+                ApiVersion = _configDb.ApiVersion ?? WellKnownData.DefaultApiVersion
+            };
+
             if (string.IsNullOrEmpty(_configDb.SafeguardAddress))
-                return new SafeguardDevOpsConnection();
+                return safeguardConnection;
 
             ISafeguardConnection sg = null;
             try
             {
-                var safeguardConnection = new SafeguardDevOpsConnection
-                {
-                    ApplianceAddress = _configDb.SafeguardAddress,
-                    IgnoreSsl = _configDb.IgnoreSsl,
-                    TrustSystemStore = _configDb.TrustSystemStore,
-                    ApiVersion = _configDb.ApiVersion ?? WellKnownData.DefaultApiVersion
-                };
-
                 if (!includeDetails)
                 {
                     return safeguardConnection;
@@ -1922,7 +1946,9 @@ namespace OneIdentity.DevOps.Logic
             if (string.IsNullOrEmpty(_configDb.SafeguardAddress))
                 return new SafeguardDevOpsConnection();
         
-            return ConnectAnonymous(_configDb.SafeguardAddress, _configDb.ApiVersion ?? WellKnownData.DefaultApiVersion, true);
+            return ConnectAnonymous(_configDb.SafeguardAddress,
+                _configDb.ApiVersion ?? WellKnownData.DefaultApiVersion, true,
+                reportedIgnoreSsl: _configDb.IgnoreSsl ?? true);
         }
 
         public SafeguardDevOpsLogon GetSafeguardLogon()
@@ -1941,7 +1967,7 @@ namespace OneIdentity.DevOps.Logic
                 HasMissingPlugins = _pluginsLogic().GetAllPlugins().Any(x => !x.IsLoaded),
                 NeedsClientCertificate = userCertificate == null,
                 NeedsSSLEnabled = safeguardConnection.IgnoreSsl ?? true,
-                NeedsTrustedCertificates = !_configDb.GetAllTrustedCertificates().Any() || !CheckSslConnection(),
+                NeedsTrustedCertificates = !CheckSslConnection(),
                 NeedsWebCertificate = webSslCertificate?.SubjectName.Name != null && webSslCertificate.SubjectName.Name.Equals(WellKnownData.DevOpsServiceDefaultWebSslCertificateSubject),
                 PassedTrustChainValidation = userCertificate != null ? CertificateHelper.ValidateTrustChain(userCertificate, _configDb, _logger) : false,
                 ReverseFlowAvailable = _monitoringLogic().ReverseFlowMonitoringAvailable()
@@ -1955,12 +1981,19 @@ namespace OneIdentity.DevOps.Logic
             if (token == null)
                 throw new DevOpsException("Invalid authorization token.", HttpStatusCode.Unauthorized);
 
+            var safeguardAddress = safeguardData.ApplianceAddress ?? _configDb.SafeguardAddress;
+            var apiVersion = safeguardData.ApiVersion ?? _configDb.ApiVersion ?? WellKnownData.DefaultApiVersion;
+            var ignoreSsl = safeguardData.IgnoreSsl ?? _configDb.IgnoreSsl ?? true;
+            var trustSystemStore = CertificateHelper.GetEffectiveTrustSystemStore(
+                safeguardData.TrustSystemStore, _configDb.TrustSystemStore);
+
             if (_configDb.SafeguardAddress != null)
             {
                 if (!string.IsNullOrEmpty(safeguardData.ApplianceAddress) 
                     && !_configDb.SafeguardAddress.Equals(safeguardData.ApplianceAddress, StringComparison.OrdinalIgnoreCase))
                 {
-                    var newSignatureCert = FetchSignatureCertificate(safeguardData.ApplianceAddress);
+                    var newSignatureCert = FetchSignatureCertificate(safeguardData.ApplianceAddress,
+                        !ignoreSsl, trustSystemStore);
                     if (!_configDb.SigningCertificate.Equals(newSignatureCert))
                     {
                         throw LogAndException(
@@ -1968,39 +2001,42 @@ namespace OneIdentity.DevOps.Logic
                     }
                 }
 
-                var signatureCert = FetchSignatureCertificate(_configDb.SafeguardAddress);
+                var signatureCert = FetchSignatureCertificate(_configDb.SafeguardAddress,
+                    !ignoreSsl, trustSystemStore);
                 if (!ValidateLogin(token, null, signatureCert))
                 {
                     throw LogAndException("Invalid login token. Authentication failed.");
                 }
             }
 
-            var enablingSsl = safeguardData.IgnoreSsl.HasValue && !safeguardData.IgnoreSsl.Value;
-            if (enablingSsl && !_configDb.GetAllTrustedCertificates().Any())
+            var trustedCertificates = _configDb.GetAllTrustedCertificates().ToArray();
+
+            var enablingSsl = !ignoreSsl;
+            if (enablingSsl && !CertificateHelper.HasCertificateTrustSource(
+                    trustSystemStore, trustedCertificates.Any()))
             {
                 throw LogAndException("Cannot enable TLS before adding trusted certificates.");
             }
 
-            if (enablingSsl && !CheckSslConnection())
+            if (enablingSsl && !CheckSslConnection(trustedCertificates, safeguardAddress, apiVersion,
+                    trustSystemStore))
             {
-                throw LogAndException("Invalid certificate chain. Unable to validate the Safeguard certificate without a complete trusted certificate chain.");
+                var trustSource = trustSystemStore
+                    ? "the operating system certificate store"
+                    : "the configured trusted certificate chain";
+                throw LogAndException($"Invalid certificate chain. Unable to validate the Safeguard certificate using {trustSource}.");
             }
 
-            var safeguardConnection = ConnectAnonymous(safeguardData.ApplianceAddress,
-                safeguardData.ApiVersion ?? WellKnownData.DefaultApiVersion, safeguardData.IgnoreSsl ?? false);
-
-            // If the user is trying to change the state of the ignoreSsl flag back to true, then use the new value.
-            //  If the current value of the flag in the database or the new value is null, then assume true or the current value.
-            safeguardConnection.IgnoreSsl = (safeguardConnection.IgnoreSsl ?? true) || (safeguardData.IgnoreSsl ?? (safeguardConnection.IgnoreSsl ?? true));
+            var safeguardConnection = ConnectAnonymous(safeguardAddress, apiVersion, ignoreSsl,
+                trustSystemStore);
 
             _applianceAvailabilityCache = null;
             if (FetchAndStoreSignatureCertificate(token, safeguardConnection))
             {
-                _configDb.SafeguardAddress = safeguardData.ApplianceAddress;
-                _configDb.ApiVersion = safeguardData.ApiVersion ?? WellKnownData.DefaultApiVersion;
-                _configDb.IgnoreSsl = safeguardData.IgnoreSsl ?? true;
-                if (safeguardData.TrustSystemStore.HasValue)
-                    _configDb.TrustSystemStore = safeguardData.TrustSystemStore;
+                _configDb.SafeguardAddress = safeguardAddress;
+                _configDb.ApiVersion = apiVersion;
+                _configDb.IgnoreSsl = ignoreSsl;
+                _configDb.TrustSystemStore = trustSystemStore;
 
                 safeguardConnection.ApplianceAddress = _configDb.SafeguardAddress;
                 safeguardConnection.ApiVersion = _configDb.ApiVersion;

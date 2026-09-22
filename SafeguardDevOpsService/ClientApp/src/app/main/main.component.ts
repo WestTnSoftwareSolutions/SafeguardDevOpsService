@@ -339,6 +339,7 @@ export class MainComponent implements OnInit, AfterViewInit {
 
   initializeApplianceAddressAndLogin(): Observable<any> {
     let saveApplianceAddress = false;
+    let trustSystemStore = true;
 
     return this.serviceClient.getSafeguard().pipe(
       tap({
@@ -348,17 +349,22 @@ export class MainComponent implements OnInit, AfterViewInit {
 
           if (!this.ApplianceAddress) {
             this.ApplianceAddress = this.window.sessionStorage.getItem('ApplianceAddress');
+            const storedTrustSystemStore = this.window.sessionStorage.getItem('TrustSystemStore');
+            if (storedTrustSystemStore !== null) {
+              trustSystemStore = storedTrustSystemStore === 'true';
+            }
             saveApplianceAddress = true;
           }
 
           this.window.sessionStorage.removeItem('ApplianceAddress');
+          this.window.sessionStorage.removeItem('TrustSystemStore');
         }
       }),
       filter(() => this.ApplianceAddress && this.ApplianceAddress !== 'null'),
       switchMap(() => this.authService.getUserToken(this.ApplianceAddress)),
       switchMap(() => {
         if (saveApplianceAddress) {
-          return this.serviceClient.putSafeguardAppliance(this.ApplianceAddress);
+          return this.serviceClient.putSafeguardAppliance(this.ApplianceAddress, trustSystemStore);
         } else {
           return of({});
         }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Security;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.RegularExpressions;
@@ -31,13 +32,21 @@ namespace OneIdentity.DevOps.Logic
 
         public static bool CertificateValidation(object sender, X509Certificate certificate, X509Chain chain,
             SslPolicyErrors sslPolicyErrors, Serilog.ILogger logger, IConfigurationRepository configDb, 
-            IEnumerable<TrustedCertificate> customTrustedCertificateList = null)
+            IEnumerable<TrustedCertificate> customTrustedCertificateList = null,
+            bool? trustSystemStoreOverride = null)
         {
             try
             {
-                if ((configDb.TrustSystemStore ?? false) && sslPolicyErrors == SslPolicyErrors.None)
+                var trustSystemStore = GetEffectiveTrustSystemStore(
+                    trustSystemStoreOverride, configDb.TrustSystemStore);
+                if (trustSystemStore && sslPolicyErrors == SslPolicyErrors.None)
                 {
                     return true;
+                }
+
+                if (trustSystemStore)
+                {
+                    logger.Error($"System certificate validation failed: {sslPolicyErrors}.");
                 }
 
                 var cert2 = new X509Certificate2(certificate);
@@ -227,7 +236,30 @@ namespace OneIdentity.DevOps.Logic
 
         public static bool ValidateTrustChain(X509Certificate2 certificate, IConfigurationRepository configDb, Serilog.ILogger logger)
         {
-            return CertificateValidation(null, certificate, null, SslPolicyErrors.None, logger, configDb);
+            var trustSystemStore = GetEffectiveTrustSystemStore(null, configDb.TrustSystemStore);
+            if (trustSystemStore)
+            {
+                using var systemChain = new X509Chain();
+                if (systemChain.Build(certificate))
+                {
+                    return true;
+                }
+            }
+
+            return CertificateValidation(null, certificate, null, SslPolicyErrors.RemoteCertificateChainErrors,
+                logger, configDb, trustSystemStoreOverride: false);
+        }
+
+        internal static bool GetEffectiveTrustSystemStore(bool? requestedValue, bool? configuredValue,
+            bool? isWindows = null)
+        {
+            return requestedValue ?? configuredValue ??
+                (isWindows ?? RuntimeInformation.IsOSPlatform(OSPlatform.Windows));
+        }
+
+        internal static bool HasCertificateTrustSource(bool trustSystemStore, bool hasTrustedCertificates)
+        {
+            return trustSystemStore || hasTrustedCertificates;
         }
 
         private static bool IsSelfSigned(X509Certificate2 cert)

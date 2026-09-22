@@ -1,6 +1,7 @@
 
 using System.Reflection;
 using System.Resources;
+using System.Runtime.CompilerServices;
 
 // General Information
 [assembly: AssemblyTitle("Safeguard Secrets Broker for Devops")]
@@ -16,4 +17,4 @@ using System.Resources;
 [assembly: AssemblyVersion("255.255.65534.65534")]
 [assembly: AssemblyFileVersion("255.255.65534.65534")]
 [assembly: NeutralResourcesLanguageAttribute( "en-US" )]
-
+[assembly: InternalsVisibleTo("SafeguardDevOpsService.Tests")]

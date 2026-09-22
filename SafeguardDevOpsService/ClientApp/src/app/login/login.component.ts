@@ -10,6 +10,7 @@ import { DevOpsServiceClient } from '../service-client.service';
 export class LoginComponent implements OnInit {
 
   applianceAddress: string;
+  trustSystemStore: boolean = true;
 
   constructor(
     private devOpsServiceClient: DevOpsServiceClient,
@@ -26,6 +27,9 @@ export class LoginComponent implements OnInit {
     this.devOpsServiceClient.getSafeguard()
       .subscribe({
         next: (data) => {
+          if (typeof data?.TrustSystemStore === 'boolean') {
+            this.trustSystemStore = data.TrustSystemStore;
+          }
           if (data?.ApplianceAddress) {
             this.applianceAddress = data.ApplianceAddress;
             this.connect();
@@ -37,6 +41,7 @@ export class LoginComponent implements OnInit {
   connect(): void {
     // Save this to storage since we are reloading
     this.window.sessionStorage.setItem('ApplianceAddress', this.applianceAddress);
+    this.window.sessionStorage.setItem('TrustSystemStore', this.trustSystemStore.toString());
 
     this.authService.login(this.applianceAddress);
   }
