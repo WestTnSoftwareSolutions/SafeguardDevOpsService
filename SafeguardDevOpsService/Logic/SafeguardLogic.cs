@@ -2517,17 +2517,196 @@ namespace OneIdentity.DevOps.Logic
             _configDb.DeleteAllTrustedCertificates();
         }
 
-        public A2ARetrievableAccount GetA2ARetrievableAccount(ISafeguardConnection sgConnection, int id, A2ARegistrationType registrationType)
+        private int GetA2ARegistrationId(A2ARegistrationType registrationType)
         {
-            if ((registrationType == A2ARegistrationType.Account && _configDb.A2aRegistrationId == null) ||
-                (registrationType == A2ARegistrationType.Vault && _configDb.A2aVaultRegistrationId == null))
-            {
-                throw LogAndException("A2A registration not configured");
-            }
-
-            var registrationId = (registrationType == A2ARegistrationType.Account)
+            var registrationId = registrationType == A2ARegistrationType.Account
                 ? _configDb.A2aRegistrationId
                 : _configDb.A2aVaultRegistrationId;
+            if (!registrationId.HasValue || registrationId.Value == 0)
+                throw LogAndException($"A2A {registrationType.ToString().ToLowerInvariant()} registration not configured");
+            return registrationId.Value;
+        }
+
+        internal static bool TryNormalizeIpRestriction(string value, out string normalized)
+        {
+            normalized = null;
+            if (string.IsNullOrWhiteSpace(value))
+                return false;
+
+            var parts = value.Trim().Split('/');
+            if (parts.Length > 2 || !IPAddress.TryParse(parts[0], out var address))
+                return false;
+
+            normalized = address.ToString();
+            if (parts.Length == 1)
+                return true;
+
+            var maximumPrefix = address.AddressFamily == AddressFamily.InterNetwork ? 32 : 128;
+            if (!int.TryParse(parts[1], out var prefix) || prefix < 0 || prefix > maximumPrefix)
+                return false;
+
+            normalized += $"/{prefix}";
+            return true;
+        }
+
+        private A2AIpRestrictionSettings NormalizeA2AIpRestrictionSettings(A2AIpRestrictionSettings settings,
+            bool requireUnrestrictedConfirmation)
+        {
+            if (settings == null)
+                throw LogAndException("A2A IP restriction settings are required.");
+
+            var validModes = new[] { "AutoDetect", "Explicit", "Unrestricted" };
+            var mode = validModes.FirstOrDefault(x => x.Equals(settings.Mode, StringComparison.OrdinalIgnoreCase));
+            if (mode == null)
+                throw LogAndException("A2A IP restriction mode must be AutoDetect, Explicit, or Unrestricted.");
+
+            var restrictions = new List<string>();
+            foreach (var restriction in settings.IpRestrictions ?? Array.Empty<string>())
+            {
+                if (!TryNormalizeIpRestriction(restriction, out var normalized))
+                    throw LogAndException($"Invalid A2A IP address or CIDR restriction: {restriction}");
+                if (!restrictions.Contains(normalized, StringComparer.OrdinalIgnoreCase))
+                    restrictions.Add(normalized);
+            }
+
+            if (mode == "Explicit" && restrictions.Count == 0)
+                throw LogAndException("At least one IP address or CIDR restriction is required in Explicit mode.");
+            if (mode == "Unrestricted" && requireUnrestrictedConfirmation && !settings.ConfirmUnrestricted)
+                throw LogAndException("Unrestricted A2A credential retrieval must be explicitly confirmed.");
+
+            return new A2AIpRestrictionSettings
+            {
+                Mode = mode,
+                IpRestrictions = mode == "Explicit" ? restrictions.ToArray() : Array.Empty<string>(),
+                ConfirmUnrestricted = false
+            };
+        }
+
+        private string[] ResolveA2AIpRestrictions(string mode, string[] configuredRestrictions)
+        {
+            if (mode.Equals("Unrestricted", StringComparison.OrdinalIgnoreCase))
+                return null;
+            if (mode.Equals("Explicit", StringComparison.OrdinalIgnoreCase))
+                return configuredRestrictions ?? Array.Empty<string>();
+            return GetLocalIPAddresses()?.Select(x => x.ToString())
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToArray() ?? Array.Empty<string>();
+        }
+
+        private string[] GetA2AIpRestrictionsForSafeguard()
+        {
+            var restrictions = ResolveA2AIpRestrictions(_configDb.A2aIpRestrictionMode, _configDb.A2aIpRestrictions);
+            if (_configDb.A2aIpRestrictionMode.Equals("AutoDetect", StringComparison.OrdinalIgnoreCase) &&
+                restrictions.Length == 0)
+                throw LogAndException("No local IP addresses were detected. Configure explicit A2A IP restrictions before adding accounts.");
+            return restrictions;
+        }
+
+        public A2AIpRestrictionSettings GetA2AIpRestrictionSettings()
+        {
+            var settings = NormalizeA2AIpRestrictionSettings(new A2AIpRestrictionSettings
+            {
+                Mode = _configDb.A2aIpRestrictionMode,
+                IpRestrictions = _configDb.A2aIpRestrictions
+            }, false);
+            settings.EffectiveIpRestrictions = ResolveA2AIpRestrictions(settings.Mode, settings.IpRestrictions)
+                ?? Array.Empty<string>();
+            settings.ReconciliationStatus = "NotApplicable";
+            return settings;
+        }
+
+        public A2AIpRestrictionSettings SetA2AIpRestrictionSettings(A2AIpRestrictionSettings settings)
+        {
+            var normalized = NormalizeA2AIpRestrictionSettings(settings, true);
+            _configDb.A2aIpRestrictionMode = normalized.Mode;
+            _configDb.A2aIpRestrictions = normalized.IpRestrictions;
+            normalized.EffectiveIpRestrictions = ResolveA2AIpRestrictions(normalized.Mode, normalized.IpRestrictions)
+                ?? Array.Empty<string>();
+
+            var registrationTypes = new List<A2ARegistrationType>();
+            if (_configDb.A2aRegistrationId.HasValue)
+                registrationTypes.Add(A2ARegistrationType.Account);
+            if (_configDb.A2aVaultRegistrationId.HasValue)
+                registrationTypes.Add(A2ARegistrationType.Vault);
+            if (registrationTypes.Count == 0)
+            {
+                normalized.ReconciliationStatus = "NotApplicable";
+                return normalized;
+            }
+
+            try
+            {
+                using var sg = Connect();
+                foreach (var registrationType in registrationTypes)
+                    ReconcileA2AIpRestrictions(sg, registrationType, normalized);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to connect to Safeguard while reconciling A2A IP restrictions.");
+                normalized.Failures.Add(new A2AIpRestrictionFailure
+                {
+                    RegistrationType = "All",
+                    Message = ex.Message
+                });
+            }
+            normalized.ReconciliationStatus = normalized.Failures.Count == 0 ? "Succeeded" : "PartialFailure";
+            return normalized;
+        }
+
+        private void ReconcileA2AIpRestrictions(ISafeguardConnection sg, A2ARegistrationType registrationType,
+            A2AIpRestrictionSettings result)
+        {
+            try
+            {
+                var registrationId = GetA2ARegistrationId(registrationType);
+                var response = DevOpsInvokeMethodFull(_configDb.SvcId, sg, Service.Core, Method.Get,
+                    $"A2ARegistrations/{registrationId}/RetrievableAccounts");
+                var accounts = JsonHelper.DeserializeObject<IEnumerable<A2ARetrievableAccount>>(response.Body)
+                    ?? Array.Empty<A2ARetrievableAccount>();
+                var desired = GetA2AIpRestrictionsForSafeguard();
+
+                foreach (var account in accounts)
+                {
+                    var current = account.IpRestrictions ?? Array.Empty<string>();
+                    var expected = desired ?? Array.Empty<string>();
+                    if (current.OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                        .SequenceEqual(expected.OrderBy(x => x, StringComparer.OrdinalIgnoreCase),
+                            StringComparer.OrdinalIgnoreCase))
+                        continue;
+
+                    try
+                    {
+                        account.IpRestrictions = desired;
+                        DevOpsInvokeMethodFull(_configDb.SvcId, sg, Service.Core, Method.Put,
+                            $"A2ARegistrations/{registrationId}/RetrievableAccounts/{account.AccountId}",
+                            JsonHelper.SerializeObject(account));
+                        result.UpdatedAccountCount++;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error(ex, $"Failed to update A2A IP restrictions for account {account.AccountId}.");
+                        result.Failures.Add(new A2AIpRestrictionFailure
+                        {
+                            RegistrationType = registrationType.ToString(),
+                            AccountId = account.AccountId,
+                            Message = ex.Message
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to reconcile {registrationType} A2A IP restrictions.");
+                result.Failures.Add(new A2AIpRestrictionFailure
+                {
+                    RegistrationType = registrationType.ToString(),
+                    Message = ex.Message
+                });
+            }
+        }
+
+        public A2ARetrievableAccount GetA2ARetrievableAccount(ISafeguardConnection sgConnection, int id, A2ARegistrationType registrationType)
+        {
+            var registrationId = GetA2ARegistrationId(registrationType);
 
             var sg = sgConnection ?? Connect();
 
@@ -2555,15 +2734,7 @@ namespace OneIdentity.DevOps.Logic
 
         public void DeleteA2ARetrievableAccount(ISafeguardConnection sgConnection, int id, A2ARegistrationType registrationType)
         {
-            if ((registrationType == A2ARegistrationType.Account && _configDb.A2aRegistrationId == null) ||
-                (registrationType == A2ARegistrationType.Vault && _configDb.A2aVaultRegistrationId == null))
-            {
-                throw LogAndException("A2A registration not configured");
-            }
-
-            var registrationId = (registrationType == A2ARegistrationType.Account)
-                ? _configDb.A2aRegistrationId
-                : _configDb.A2aVaultRegistrationId;
+            var registrationId = GetA2ARegistrationId(registrationType);
 
             var sg = sgConnection ?? Connect();
 
@@ -2589,15 +2760,7 @@ namespace OneIdentity.DevOps.Logic
 
         public IEnumerable<A2ARetrievableAccount> GetA2ARetrievableAccounts(ISafeguardConnection sgConnection, A2ARegistrationType registrationType)
         {
-            if ((registrationType == A2ARegistrationType.Account && _configDb.A2aRegistrationId == null) ||
-                (registrationType == A2ARegistrationType.Vault && _configDb.A2aVaultRegistrationId == null))
-            {
-                throw LogAndException("A2A registration not configured");
-            }
-
-            var registrationId = (registrationType == A2ARegistrationType.Account)
-                ? _configDb.A2aRegistrationId
-                : _configDb.A2aVaultRegistrationId;
+            var registrationId = GetA2ARegistrationId(registrationType);
 
             var sg = sgConnection ?? Connect();
 
@@ -2625,15 +2788,7 @@ namespace OneIdentity.DevOps.Logic
 
         public A2ARetrievableAccount GetA2ARetrievableAccountById(ISafeguardConnection sgConnection, A2ARegistrationType registrationType, int accountId)
         {
-            if ((registrationType == A2ARegistrationType.Account && _configDb.A2aRegistrationId == null) ||
-                (registrationType == A2ARegistrationType.Vault && _configDb.A2aVaultRegistrationId == null))
-            {
-                throw LogAndException("A2A registration not configured");
-            }
-
-            var registrationId = (registrationType == A2ARegistrationType.Account)
-                ? _configDb.A2aRegistrationId
-                : _configDb.A2aVaultRegistrationId;
+            var registrationId = GetA2ARegistrationId(registrationType);
 
             var sg = sgConnection ?? Connect();
 
@@ -2671,27 +2826,42 @@ namespace OneIdentity.DevOps.Logic
 
         public IEnumerable<A2ARetrievableAccount> AddA2ARetrievableAccounts(ISafeguardConnection sgConnection, IEnumerable<SppAccount> accounts, A2ARegistrationType registrationType)
         {
-            if (_configDb.A2aRegistrationId == null)
-            {
-                throw LogAndException("A2A registration not configured");
-            }
-
-            var ipRestrictions = LocalIPAddress();
-            var registrationId = (registrationType == A2ARegistrationType.Account)
-                ? _configDb.A2aRegistrationId
-                : _configDb.A2aVaultRegistrationId;
+            var registrationId = GetA2ARegistrationId(registrationType);
+            var ipRestrictions = GetA2AIpRestrictionsForSafeguard();
 
             var sg = sgConnection ?? Connect();
 
             try
             {
+                var existingAccounts = GetA2ARetrievableAccounts(sg, registrationType).ToArray();
                 foreach (var account in accounts)
                 {
                     try
                     {
+                        var existingAccount = existingAccounts.FirstOrDefault(x => x.AccountId == account.Id);
+                        if (existingAccount != null)
+                        {
+                            var current = existingAccount.IpRestrictions ?? Array.Empty<string>();
+                            var expected = ipRestrictions ?? Array.Empty<string>();
+                            if (!current.OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                                .SequenceEqual(expected.OrderBy(x => x, StringComparer.OrdinalIgnoreCase),
+                                    StringComparer.OrdinalIgnoreCase))
+                            {
+                                existingAccount.IpRestrictions = ipRestrictions;
+                                DevOpsInvokeMethodFull(_configDb.SvcId, sg, Service.Core, Method.Put,
+                                    $"A2ARegistrations/{registrationId}/RetrievableAccounts/{account.Id}",
+                                    JsonHelper.SerializeObject(existingAccount));
+                            }
+                            continue;
+                        }
+
                         DevOpsInvokeMethodFull(_configDb.SvcId, sg, Service.Core, Method.Post,
                             $"A2ARegistrations/{registrationId}/RetrievableAccounts",
-                            $"{{\"AccountId\":{account.Id}, \"IpRestrictions\":[{ipRestrictions}]}}");
+                            JsonHelper.SerializeObject(new
+                            {
+                                AccountId = account.Id,
+                                IpRestrictions = ipRestrictions
+                            }));
                     }
                     catch (Exception ex)
                     {
@@ -2710,10 +2880,7 @@ namespace OneIdentity.DevOps.Logic
 
         public void RemoveA2ARetrievableAccounts(ISafeguardConnection sgConnection, IEnumerable<A2ARetrievableAccount> accounts, A2ARegistrationType registrationType)
         {
-            if (_configDb.A2aRegistrationId == null)
-            {
-                throw LogAndException("A2A registration not configured");
-            }
+            var registrationId = GetA2ARegistrationId(registrationType);
 
             var retrievableAccounts = accounts.ToArray();
             if (retrievableAccounts.All(x => x.AccountId == 0))
@@ -2722,10 +2889,6 @@ namespace OneIdentity.DevOps.Logic
                 _logger.Error(msg);
                 throw new DevOpsException(msg);
             }
-
-            var registrationId = (registrationType == A2ARegistrationType.Account)
-                ? _configDb.A2aRegistrationId
-                : _configDb.A2aVaultRegistrationId;
 
             var sg = sgConnection ?? Connect();
 

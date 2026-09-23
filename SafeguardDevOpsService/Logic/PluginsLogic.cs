@@ -614,7 +614,8 @@ namespace OneIdentity.DevOps.Logic
                 }
 
                 // Make sure that the vault account isn't being used by another plugin before we delete it.
-                if (plugin.VaultAccountId != null && (VaultAccountUsage(plugin.VaultAccountId.Value) <= 1))
+                if (plugin.VaultAccountId != null && plugin.VaultAccountId.Value != account.Id &&
+                    VaultAccountUsage(plugin.VaultAccountId.Value) <= 1)
                 {
                     _safeguardLogic.DeleteA2ARetrievableAccount(sgConnection, plugin.VaultAccountId.Value,
                         A2ARegistrationType.Vault);

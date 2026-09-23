@@ -14,6 +14,10 @@
       <mat-icon>settings</mat-icon>
     </button>
     <mat-menu #settingsMenu="matMenu">
+      <button mat-menu-item (click)="editA2AIpRestrictions()"
+        [disabled]='isUploading.Plugin || isUploading.Addon || isUploading.Backup || isRestarting'>
+        <mat-icon>security</mat-icon>A2A IP Restrictions
+      </button>
       <button mat-menu-item (click)="uploadAddon()"
         [disabled]='isUploading.Plugin || isUploading.Addon || isUploading.Backup || isRestarting || !isLicensed'>
         <mat-icon>upload</mat-icon>Upload Add-on

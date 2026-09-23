@@ -73,7 +73,7 @@
               <mat-icon>close</mat-icon>
             </button>
           </div>
-          <div class="field-text">This account will be used by Secrets Broker to pull new passwords from Safeguard</div>
+          <div class="field-text">This Safeguard account stores the credential Secrets Broker uses to authenticate to the external vault.</div>
         </div>
         <div class="disable-flag">
           <mat-checkbox color="primary" *ngIf="!plugin.IsSystemOwned" [(ngModel)]="plugin.IsDisabled"
