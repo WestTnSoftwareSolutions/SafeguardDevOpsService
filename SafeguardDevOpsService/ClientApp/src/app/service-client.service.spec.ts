@@ -5,6 +5,7 @@ import { DevOpsServiceClient } from './service-client.service';
 describe('DevOpsServiceClient', () => {
   function createClient(): { client: DevOpsServiceClient, http: any } {
     const http = {
+      get: jasmine.createSpy('get').and.returnValue(of({})),
       put: jasmine.createSpy('put').and.returnValue(of({}))
     };
     const windowMock = {
@@ -43,5 +44,22 @@ describe('DevOpsServiceClient', () => {
       IgnoreSsl: true,
       TrustSystemStore: false
     });
+  });
+
+  it('gets A2A IP restrictions using the authenticated service endpoint', () => {
+    const { client, http } = createClient();
+    client.getA2AIpRestrictions().subscribe();
+    expect(http.get).toHaveBeenCalledWith(
+      '/service/devops/v2/Safeguard/A2AIpRestrictions',
+      { headers: { Authorization: 'spp-token test-token' } });
+  });
+
+  it('updates A2A IP restrictions using the authenticated service endpoint', () => {
+    const { client, http } = createClient();
+    const settings = { Mode: 'Explicit', IpRestrictions: ['203.0.113.10/32'] };
+    client.putA2AIpRestrictions(settings).subscribe();
+    expect(http.put).toHaveBeenCalledWith(
+      '/service/devops/v2/Safeguard/A2AIpRestrictions', settings,
+      { headers: { Authorization: 'spp-token test-token' } });
   });
 });

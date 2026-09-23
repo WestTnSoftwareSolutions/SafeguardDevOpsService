@@ -77,6 +77,32 @@ namespace OneIdentity.DevOps.Controllers.V2
         }
 
         /// <summary>
+        /// Get the source IP policy applied to A2A credential retrieval entries.
+        /// </summary>
+        [SafeguardSessionKeyAuthorization]
+        [SafeguardSessionHandler]
+        [UnhandledExceptionError]
+        [HttpGet("A2AIpRestrictions")]
+        public ActionResult<A2AIpRestrictionSettings> GetA2AIpRestrictions(
+            [FromServices] ISafeguardLogic safeguard)
+        {
+            return Ok(safeguard.GetA2AIpRestrictionSettings());
+        }
+
+        /// <summary>
+        /// Set the source IP policy and reconcile existing A2A credential retrieval entries.
+        /// </summary>
+        [SafeguardSessionKeyAuthorization]
+        [SafeguardSessionHandler]
+        [UnhandledExceptionError]
+        [HttpPut("A2AIpRestrictions")]
+        public ActionResult<A2AIpRestrictionSettings> SetA2AIpRestrictions(
+            [FromServices] ISafeguardLogic safeguard, [FromBody] A2AIpRestrictionSettings settings)
+        {
+            return Ok(safeguard.SetA2AIpRestrictionSettings(settings));
+        }
+
+        /// <summary>
         /// Get the Safeguard client configuration information being used by Safeguard Secrets Broker for DevOps.
         /// </summary>
         /// <remarks>

@@ -95,6 +95,16 @@ export class DevOpsServiceClient {
       .pipe(catchError(this.error<any>('putSafeguardUseSsl')));
   }
 
+  getA2AIpRestrictions(): Observable<any> {
+    return this.http.get(this.BASE + 'Safeguard/A2AIpRestrictions', this.authHeader())
+      .pipe(catchError(this.error<any>('getA2AIpRestrictions')));
+  }
+
+  putA2AIpRestrictions(settings: any): Observable<any> {
+    return this.http.put(this.BASE + 'Safeguard/A2AIpRestrictions', settings, this.authHeader())
+      .pipe(catchError(this.error<any>('putA2AIpRestrictions')));
+  }
+
   logon(): Observable<any> {
     return this.http.get(this.BASE + 'Safeguard/Logon', this.authHeader())
       .pipe(catchError(this.error<any>('logon')));

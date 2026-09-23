@@ -4,5 +4,10 @@
     "HttpsPort": "443",
     "LogLevel": "Information",
     "LogRollingInterval": "Day", // Infinite, Minute, Hour, Day, Month, Year
-    "LogFileCountLimit": "31" // Use '0' for no limit 
+    "LogFileCountLimit": "31", // Use '0' for no limit
+    // Seeds the database once. Use AutoDetect, Explicit, or Unrestricted.
+    "A2A": {
+        "IpRestrictionMode": "AutoDetect",
+        "IpRestrictions": []
+    }
 }

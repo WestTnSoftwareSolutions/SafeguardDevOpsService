@@ -1,0 +1,69 @@
+<div class="root-container">
+  <div mat-dialog-title>
+    <div class="dialog-title-elements">
+      <div class="title-text">A2A IP Restrictions</div>
+      <div class="close-button">
+        <button mat-icon-button (click)="close()" tabindex="-1" class="link-button"><mat-icon>close</mat-icon></button>
+      </div>
+    </div>
+  </div>
+
+  <app-error-bar *ngIf="error" [error]="error" (dismissed)="error=null"></app-error-bar>
+
+  <mat-dialog-content>
+    <p>Limit which source addresses may retrieve credentials through both Secrets Broker A2A registrations.</p>
+
+    <mat-radio-group [(ngModel)]="mode" class="mode-group" [disabled]="isLoading">
+      <mat-radio-button value="AutoDetect">
+        <b>Automatically detect this host</b>
+        <span>Use the broker host's local IPv4 addresses.</span>
+      </mat-radio-button>
+      <mat-radio-button value="Explicit">
+        <b>Specify addresses</b>
+        <span>Use fixed IPv4, IPv6, or CIDR entries.</span>
+      </mat-radio-button>
+      <mat-radio-button value="Unrestricted">
+        <b>Unrestricted</b>
+        <span>Allow retrieval from any source address.</span>
+      </mat-radio-button>
+    </mat-radio-group>
+
+    <mat-form-field appearance="outline" class="restrictions" *ngIf="mode === 'Explicit'">
+      <mat-label>IP addresses or CIDR ranges</mat-label>
+      <textarea matInput rows="6" [(ngModel)]="restrictionsText"
+        placeholder="203.0.113.10/32&#10;10.20.0.0/16"></textarea>
+      <mat-hint>Enter one value per line.</mat-hint>
+    </mat-form-field>
+
+    <div class="effective" *ngIf="mode === 'AutoDetect' && !isLoading">
+      <b>Detected addresses</b>
+      <div *ngIf="effectiveRestrictions.length; else noAddresses">{{effectiveRestrictions.join(', ')}}</div>
+      <ng-template #noAddresses><div class="warning">No local addresses were detected.</div></ng-template>
+    </div>
+
+    <div class="unrestricted-warning" *ngIf="mode === 'Unrestricted'">
+      <mat-icon>warning</mat-icon>
+      <div>
+        <b>This removes an important defense-in-depth control.</b>
+        <p>Any host with the client certificate and account API key could retrieve the credential.</p>
+        <mat-checkbox [(ngModel)]="confirmUnrestricted" color="warn">
+          I understand and want to allow retrieval from any IP address.
+        </mat-checkbox>
+      </div>
+    </div>
+
+    <div class="reconciliation" *ngIf="failures.length">
+      <b>Accounts that could not be updated</b>
+      <div *ngFor="let failure of failures">
+        {{failure.RegistrationType}}<span *ngIf="failure.AccountId"> account {{failure.AccountId}}</span>: {{failure.Message}}
+      </div>
+    </div>
+
+    <mat-spinner color="accent" diameter="48" *ngIf="isLoading"></mat-spinner>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button (click)="close()" [disabled]="isLoading">Cancel</button>
+    <button mat-flat-button color="primary" (click)="save()" [disabled]="!canSave">Save and Apply</button>
+  </mat-dialog-actions>
+</div>

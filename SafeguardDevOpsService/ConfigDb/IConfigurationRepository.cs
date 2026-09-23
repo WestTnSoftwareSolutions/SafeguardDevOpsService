@@ -30,6 +30,8 @@ namespace OneIdentity.DevOps.ConfigDb
         string DbPasswd { get; }
         bool? IgnoreSsl { get; set; }
         bool? TrustSystemStore { get; set; }
+        string A2aIpRestrictionMode { get; set; }
+        string[] A2aIpRestrictions { get; set; }
         int? A2aUserId { get; set; }
         int? A2aRegistrationId { get; set; }
         int? A2aVaultRegistrationId { get; set; }

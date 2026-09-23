@@ -20,6 +20,8 @@ namespace OneIdentity.DevOps.Logic
         SafeguardDevOpsConnection GetSafeguardConnection();
         SafeguardDevOpsLogon GetSafeguardLogon();
         SafeguardDevOpsConnection SetSafeguardData(string token, SafeguardData safeguardData);
+        A2AIpRestrictionSettings GetA2AIpRestrictionSettings();
+        A2AIpRestrictionSettings SetA2AIpRestrictionSettings(A2AIpRestrictionSettings settings);
         bool SetThreadData(string token);
 
         bool ValidateLicense();

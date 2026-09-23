@@ -8,6 +8,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using CredentialManagement;
 using LiteDB;
+using Microsoft.Extensions.Configuration;
 using OneIdentity.DevOps.Common;
 using OneIdentity.DevOps.Data;
 using OneIdentity.DevOps.Data.Spp;
@@ -41,6 +42,8 @@ namespace OneIdentity.DevOps.ConfigDb
         private const string ApiVersionKey = "ApiVersion";
         private const string IgnoreSslKey = "IgnoreSsl";
         private const string TrustSystemStoreKey = "TrustSystemStore";
+        private const string A2aIpRestrictionModeKey = "A2aIpRestrictionMode";
+        private const string A2aIpRestrictionsKey = "A2aIpRestrictions";
         private const string A2aUserIdKey = "A2aUserId";
         private const string A2aRegistrationIdKey = "A2aRegistrationId";
         private const string A2aVaultRegistrationIdKey = "A2aVaultRegistrationId";
@@ -64,11 +67,33 @@ namespace OneIdentity.DevOps.ConfigDb
 
         private readonly bool _isLinux;
 
-        public LiteDbConfigurationRepository()
+        public LiteDbConfigurationRepository(IConfiguration configuration = null)
         {
             _logger = Serilog.Log.Logger;
             _isLinux = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
             InitializeDatabase();
+            SeedA2aIpRestrictions(configuration);
+        }
+
+        private void SeedA2aIpRestrictions(IConfiguration configuration)
+        {
+            if (!string.IsNullOrWhiteSpace(GetSimpleSetting(A2aIpRestrictionModeKey)))
+                return;
+
+            var mode = configuration?["A2A:IpRestrictionMode"];
+            var restrictions = configuration?.GetSection("A2A:IpRestrictions")
+                .GetChildren().Select(x => x.Value).Where(x => !string.IsNullOrWhiteSpace(x)).ToArray()
+                ?? Array.Empty<string>();
+
+            if (restrictions.Length == 0 && !string.IsNullOrWhiteSpace(configuration?["A2A:IpRestrictions"]))
+            {
+                restrictions = configuration["A2A:IpRestrictions"]
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).ToArray();
+            }
+
+            A2aIpRestrictionMode = string.IsNullOrWhiteSpace(mode) ? "AutoDetect" : mode;
+            A2aIpRestrictions = restrictions;
         }
 
         private void InitializeDatabase()
@@ -471,6 +496,20 @@ namespace OneIdentity.DevOps.ConfigDb
                 }
             }
             set => SetSimpleSetting(TrustSystemStoreKey, value.ToString());
+        }
+
+        public string A2aIpRestrictionMode
+        {
+            get => GetSimpleSetting(A2aIpRestrictionModeKey) ?? "AutoDetect";
+            set => SetSimpleSetting(A2aIpRestrictionModeKey, value);
+        }
+
+        public string[] A2aIpRestrictions
+        {
+            get => (GetSimpleSetting(A2aIpRestrictionsKey) ?? string.Empty)
+                .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(x => x.Trim()).Where(x => x.Length > 0).ToArray();
+            set => SetSimpleSetting(A2aIpRestrictionsKey, string.Join(",", value ?? Array.Empty<string>()));
         }
 
         public int? A2aUserId

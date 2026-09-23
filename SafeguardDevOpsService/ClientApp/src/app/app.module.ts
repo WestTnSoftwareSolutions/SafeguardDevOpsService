@@ -29,6 +29,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSortModule } from '@angular/material/sort';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatPaginatorModule } from '@angular/material/paginator';
+import { MatRadioModule } from '@angular/material/radio';
 
 import { UploadCertificateComponent } from './upload-certificate/upload-certificate.component';
 import { DevOpsServiceClient } from './service-client.service';
@@ -46,6 +47,7 @@ import { ErrorBarComponent } from './error-bar/error-bar.component';
 import { ViewMonitorEventsComponent } from './view-monitor-events/view-monitor-events.component';
 import { RegistrationsComponent } from './registrations/registrations.component';
 import { MatSelectModule } from '@angular/material/select';
+import { EditA2AIpRestrictionsComponent } from './edit-a2a-ip-restrictions/edit-a2a-ip-restrictions.component';
 
 @NgModule({
   declarations: [
@@ -65,7 +67,8 @@ import { MatSelectModule } from '@angular/material/select';
     ProgressSpinnerComponent,
     ErrorBarComponent,
     ViewMonitorEventsComponent,
-    RegistrationsComponent
+    RegistrationsComponent,
+    EditA2AIpRestrictionsComponent
   ],
   imports: [
     BrowserModule,
@@ -93,7 +96,8 @@ import { MatSelectModule } from '@angular/material/select';
     MatSortModule,
     MatProgressSpinnerModule,
     MatPaginatorModule,
-    MatSelectModule
+    MatSelectModule,
+    MatRadioModule
   ],
   entryComponents: [
     UploadCertificateComponent

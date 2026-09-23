@@ -1,0 +1,19 @@
+@import '../../colors.scss';
+
+.root-container { min-width: 500px; }
+.mode-group { display: flex; flex-direction: column; gap: 14px; margin: 20px 0; }
+mat-radio-button span { display: block; margin-left: 28px; color: $black-9; }
+.restrictions { width: 100%; }
+.effective, .reconciliation { margin: 18px 0; }
+.warning { color: #b00020; }
+.unrestricted-warning {
+  display: flex;
+  gap: 12px;
+  padding: 14px;
+  margin: 18px 0;
+  background: #fff4e5;
+  border: 1px solid #f5a623;
+}
+.unrestricted-warning mat-icon { color: #b26a00; }
+.unrestricted-warning p { margin: 4px 0 12px; }
+mat-spinner { margin: 20px auto; }

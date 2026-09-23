@@ -20,6 +20,7 @@ import { ConfirmDialogComponent } from '../confirm-dialog/confirm-dialog.compone
 import { HttpResponse } from '@angular/common/http';
 import { ViewMonitorEventsComponent } from '../view-monitor-events/view-monitor-events.component';
 import { cloneDeep } from 'lodash';
+import { EditA2AIpRestrictionsComponent } from '../edit-a2a-ip-restrictions/edit-a2a-ip-restrictions.component';
 
 @UntilDestroy()
 @Component({
@@ -1129,6 +1130,14 @@ export class MainComponent implements OnInit, AfterViewInit {
           this.window.location.reload();
         }
       }
+    });
+  }
+
+  editA2AIpRestrictions(): void {
+    this.error = null;
+    this.dialog.open(EditA2AIpRestrictionsComponent, {
+      width: '600px',
+      disableClose: true
     });
   }
 
